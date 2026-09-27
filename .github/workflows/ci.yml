@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [ main, master ]
   schedule:
-    - cron: '0 3 * * *'     # ночной прогон в 03:00 UTC
+    - cron: '0 3 * * *'
   workflow_dispatch:
     inputs:
       suite:
@@ -40,17 +40,14 @@ jobs:
           java-version: '21'
           cache: maven
 
-      # ---------- PR: только smoke ----------
       - name: Run smoke suite (PR only)
         if: github.event_name == 'pull_request'
         run: mvn -B clean test -DsuiteXmlFile=testng-smoke.xml
 
-      # ---------- Push / schedule: полный suite ----------
       - name: Run full suite (push/schedule)
         if: github.event_name == 'push' || github.event_name == 'schedule'
         run: mvn -B clean test -DsuiteXmlFile=testng.xml
 
-      # ---------- Ручной запуск: выбор из dropdown ----------
       - name: Resolve selected suite
         id: resolve
         if: github.event_name == 'workflow_dispatch'
@@ -102,34 +99,16 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Download Allure results
+      - name: Download Allure report
         uses: actions/download-artifact@v4
         with:
-          name: allure-results
-          path: allure-results
-
-      - name: Get Allure history
-        uses: actions/checkout@v4
-        if: always()
-        continue-on-error: true
-        with:
-          ref: gh-pages
-          path: gh-pages
-
-      - name: Generate Allure report
-        uses: simple-elf/allure-report-action@v1.9
-        if: always()
-        with:
-          allure_results: allure-results
-          allure_history: allure-history
-          keep_reports: 20
-          gh_pages: gh-pages
-          subfolder: allure
+          name: allure-report
+          path: allure-report
 
       - name: Deploy to GitHub Pages
-        if: always()
         uses: peaceiris/actions-gh-pages@v4
         with:
           github_token: ${{ secrets.GITHUB_TOKEN }}
           publish_branch: gh-pages
-          publish_dir: allure-history
+          publish_dir: allure-report
+          force_orphan: true
