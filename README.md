@@ -1,5 +1,6 @@
 # API Automation Project (Rest Assured + TestNG)
 
+[![CI](https://github.com/AndreiDovidovich/rest-assured-testng-project/actions/workflows/ci.yml/badge.svg)](https://github.com/AndreiDovidovich/rest-assured-testng-project/actions/workflows/ci.yml)
 ![Java](https://img.shields.io/badge/Java-21-blue)
 ![RestAssured](https://img.shields.io/badge/RestAssured-6.0.1-43B02A?logo=rest-assured&logoColor=white)
 ![TestNG](https://img.shields.io/badge/TestNG-7.12.0-red)
