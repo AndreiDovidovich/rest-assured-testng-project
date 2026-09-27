@@ -1,0 +1,135 @@
+name: CI — RestAssured API Tests (TestNG)
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  schedule:
+    - cron: '0 3 * * *'     # ночной прогон в 03:00 UTC
+  workflow_dispatch:
+    inputs:
+      suite:
+        description: 'Which suite to run'
+        required: true
+        default: 'All tests suite'
+        type: choice
+        options:
+          - All tests suite
+          - Smoke tests suite
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  test:
+    name: Run API tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+
+      # ---------- PR: только smoke ----------
+      - name: Run smoke suite (PR only)
+        if: github.event_name == 'pull_request'
+        run: mvn -B clean test -DsuiteXmlFile=testng-smoke.xml
+
+      # ---------- Push / schedule: полный suite ----------
+      - name: Run full suite (push/schedule)
+        if: github.event_name == 'push' || github.event_name == 'schedule'
+        run: mvn -B clean test -DsuiteXmlFile=testng.xml
+
+      # ---------- Ручной запуск: выбор из dropdown ----------
+      - name: Resolve selected suite
+        id: resolve
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          case "${{ github.event.inputs.suite }}" in
+            "All tests suite")   echo "file=testng.xml"       >> $GITHUB_OUTPUT ;;
+            "Smoke tests suite") echo "file=testng-smoke.xml" >> $GITHUB_OUTPUT ;;
+            *)                   echo "file=testng.xml"       >> $GITHUB_OUTPUT ;;
+          esac
+
+      - name: Run selected suite
+        if: github.event_name == 'workflow_dispatch'
+        run: mvn -B clean test -DsuiteXmlFile=${{ steps.resolve.outputs.file }}
+
+      - name: Generate Allure report
+        if: always()
+        run: mvn -B allure:report
+
+      - name: Upload Allure results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-results
+          path: target/allure-results
+          retention-days: 14
+
+      - name: Upload Allure report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: target/site/allure-maven-plugin
+          retention-days: 14
+
+      - name: Upload surefire reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: surefire-reports
+          path: target/surefire-reports
+          retention-days: 7
+
+  publish-report:
+    name: Publish Allure report to GitHub Pages
+    needs: test
+    if: always() && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download Allure results
+        uses: actions/download-artifact@v4
+        with:
+          name: allure-results
+          path: allure-results
+
+      - name: Get Allure history
+        uses: actions/checkout@v4
+        if: always()
+        continue-on-error: true
+        with:
+          ref: gh-pages
+          path: gh-pages
+
+      - name: Generate Allure report
+        uses: simple-elf/allure-report-action@v1.9
+        if: always()
+        with:
+          allure_results: allure-results
+          allure_history: allure-history
+          keep_reports: 20
+          gh_pages: gh-pages
+          subfolder: allure
+
+      - name: Deploy to GitHub Pages
+        if: always()
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: gh-pages
+          publish_dir: allure-history
